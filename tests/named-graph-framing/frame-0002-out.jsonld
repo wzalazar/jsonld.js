@@ -1,0 +1,16 @@
+{
+  "@context": {
+    "@vocab": "urn:"
+  },
+  "@graph": [{
+    "@id": "urn:id-1",
+    "@type": "Class",
+    "merge": {
+      "@id": "_:b0",
+      "@graph": {
+        "@id": "urn:id-2",
+        "term": "data"
+      }
+    }
+  }]
+}

@@ -1,0 +1,37 @@
+{
+  "@context": "http://json-ld.org/test-suite/context.jsonld",
+  "@id": "",
+  "@type": "mf:Manifest",
+  "name": "Named Graph Framing",
+  "description": "JSON-LD framing tests use object comparison.",
+  "baseIri": "",
+  "sequence": [{
+    "@id": "#t0001",
+    "@type": ["jld:PositiveEvaluationTest", "jld:FrameTest"],
+    "name": "Merge graphs",
+    "input": "frame-0001-in.jsonld",
+    "frame": "frame-0001-frame.jsonld",
+    "expect": "frame-0001-out.jsonld"
+  }, {
+    "@id": "#t0002",
+    "@type": ["jld:PositiveEvaluationTest", "jld:FrameTest"],
+    "name": "Preserve graphs",
+    "input": "frame-0002-in.jsonld",
+    "frame": "frame-0002-frame.jsonld",
+    "expect": "frame-0002-out.jsonld"
+  }, {
+    "@id": "#t0003",
+    "@type": ["jld:PositiveEvaluationTest", "jld:FrameTest"],
+    "name": "Merge one graph and preserve another",
+    "input": "frame-0003-in.jsonld",
+    "frame": "frame-0003-frame.jsonld",
+    "expect": "frame-0003-out.jsonld"
+  }, {
+    "@id": "#t0004",
+    "@type": ["jld:PositiveEvaluationTest", "jld:FrameTest"],
+    "name": "Merge one graph and deep preserve another",
+    "input": "frame-0004-in.jsonld",
+    "frame": "frame-0004-frame.jsonld",
+    "expect": "frame-0004-out.jsonld"
+  }]
+}

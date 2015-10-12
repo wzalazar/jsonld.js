@@ -3,7 +3,10 @@ REPORTER = spec
 
 all:
 
-test: test-node test-browser test-local-node test-local-browser test-normalization-node test-normalization-browser
+test: test-node test-browser \
+  test-normalization-node test-normalization-browser \
+	test-embed-api-node test-embed-api-browser \
+	test-named-graph-framing-node test-named-graph-framing-browser
 
 test-suite: test-suite-node test-suite-browser
 
@@ -37,17 +40,23 @@ test-node:
 test-browser:
 	@JSONLD_TEST_SUITE=../json-ld.org/test-suite $(MAKE) test-suite-browser
 
-test-local-node:
-	@JSONLD_TEST_SUITE=./tests/new-embed-api $(MAKE) test-suite-node
-
-test-local-browser:
-	@JSONLD_TEST_SUITE=./tests/new-embed-api $(MAKE) test-suite-browser
-
 test-normalization-node:
 	@JSONLD_TEST_SUITE=../normalization/tests $(MAKE) test-suite-node
 
 test-normalization-browser:
 	@JSONLD_TEST_SUITE=../normalization/tests $(MAKE) test-suite-browser
+
+test-embed-api-node:
+	@JSONLD_TEST_SUITE=./tests/new-embed-api $(MAKE) test-suite-node
+
+test-embed-api-browser:
+	@JSONLD_TEST_SUITE=./tests/new-embed-api $(MAKE) test-suite-browser
+
+test-named-graph-framing-node:
+	@JSONLD_TEST_SUITE=./tests/named-graph-framing $(MAKE) test-suite-node
+
+test-named-graph-framing-browser:
+	@JSONLD_TEST_SUITE=./tests/named-graph-framing $(MAKE) test-suite-browser
 
 test-coverage:
 	./node_modules/.bin/istanbul cover ./node_modules/.bin/_mocha -- \
@@ -56,4 +65,8 @@ test-coverage:
 clean:
 	rm -rf coverage
 
-.PHONY: test test-node test-browser test-local-node test-local-browser test-normalization-node test-normalization-browser test-coverage clean
+.PHONY: test test-node test-browser \
+  test-normalization-node test-normalization-browser \
+	test-embed-api-node test-embed-api-browser \
+	test-named-graph-framing-node test-named-graph-framing-browser \
+	test-coverage clean

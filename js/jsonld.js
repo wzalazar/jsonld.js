@@ -1142,7 +1142,7 @@ jsonld.merge = function(docs, ctx, options, callback) {
       }
 
       // add all non-default graphs to default graph
-      defaultGraph = _mergeNodeMaps(graphs);
+      defaultGraph = _mergeNamedGraphsIntoDefault(graphs);
     } catch(ex) {
       return callback(ex);
     }
@@ -3047,7 +3047,7 @@ Processor.prototype.createNodeMap = function(input, options) {
   _createNodeMap(input, graphs, '@default', issuer);
 
   // add all non-default graphs to default graph
-  return _mergeNodeMaps(graphs);
+  return _mergeNamedGraphsIntoDefault(graphs);
 };
 
 /**
@@ -3083,23 +3083,43 @@ Processor.prototype.flatten = function(input) {
  * @return the framed output.
  */
 Processor.prototype.frame = function(input, frame, options) {
+  // validate top-level frame
+  _validateFrame(frame);
+try {
   // create framing state
   var state = {
     options: options,
-    graphs: {'@default': {}, '@merged': {}},
+    graphMap: {'@default': {}},
+    graphStack: [],
     subjectStack: [],
-    link: {}
+    link: {'@default': {}}
   };
 
-  // produce a map of all graphs and name each bnode
-  // FIXME: currently uses subjects from @merged graph only
+  // populate graph map
   var issuer = new IdentifierIssuer('_:b');
-  _createNodeMap(input, state.graphs, '@merged', issuer);
-  state.subjects = state.graphs['@merged'];
+  _createNodeMap(input, state.graphMap, '@default', issuer);
+  console.log('graphMap', JSON.stringify(state.graphMap, null, 2));
+
+  // if `@graph: [{}]` (ignore invalid `@graph: [{}, ...]`)
+  if('@graph' in frame[0] &&
+    _isObject(frame[0]['@graph'][0]) &&
+    Object.keys(frame[0]['@graph'][0]).length === 0) {
+    // only look in default graph for frame matches
+    state.graph = '@default';
+  } else {
+    // search in a merge of all graphs for frame matches
+    state.graph = '@merged';
+    state.link['@merged'] = {};
+    _createMergedGraph(state.graphMap);
+  }
 
   // frame the subjects
   var framed = [];
-  _frame(state, Object.keys(state.subjects).sort(), frame, framed, null);
+  var subjects = Object.keys(state.graphMap[state.graph]).sort();
+  _frame(state, subjects, frame, framed, null);
+} catch(ex) {
+  console.log(ex.stack);
+}
   return framed;
 };
 
@@ -3309,6 +3329,8 @@ Processor.prototype.toRDF = function(input, options) {
   // create node map for default graph (and any named graphs)
   var issuer = new IdentifierIssuer('_:b');
   var nodeMap = {'@default': {}};
+  // FIXME: call this.createNodeMap instead? seems like it would be missing
+  // properties about named graphs otherwise
   _createNodeMap(input, nodeMap, '@default', issuer);
 
   var dataset = {};
@@ -4742,8 +4764,7 @@ function _createNodeMap(input, graphs, graph, issuer, name, list) {
       if(!(name in graphs)) {
         graphs[name] = {};
       }
-      var g = (graph === '@merged') ? graph : name;
-      _createNodeMap(input[property], graphs, g, issuer);
+      _createNodeMap(input[property], graphs, name, issuer);
       continue;
     }
 
@@ -4810,7 +4831,7 @@ function _createNodeMap(input, graphs, graph, issuer, name, list) {
   }
 }
 
-function _mergeNodeMaps(graphs) {
+function _mergeNamedGraphsIntoDefault(graphs) {
   // add all non-default graphs to default graph
   var defaultGraph = graphs['@default'];
   var graphNames = Object.keys(graphs).sort();
@@ -4842,6 +4863,47 @@ function _mergeNodeMaps(graphs) {
   return defaultGraph;
 }
 
+function _createMergedGraph(graphMap) {
+  // generate a '@merged' graph from all graphs
+  var merged = {};
+  var graphNames = Object.keys(graphMap).sort();
+  for(var i = 0; i < graphNames.length; ++i) {
+    var graphName = graphNames[i];
+    var nodeMap = graphMap[graphName];
+    for(var id in nodeMap) {
+      var subject = nodeMap[id];
+      var mergedSubject;
+      if(id in merged) {
+        mergedSubject = merged[id];
+      } else {
+        mergedSubject = merged[id] = {'@id': id};
+      }
+
+      // iterate over subject properties
+      var properties = Object.keys(subject).sort();
+      for(var pi = 0; pi < properties.length; ++pi) {
+        var property = properties[pi];
+
+        // copy keywords
+        if(_isKeyword(property)) {
+          mergedSubject[property] = _clone(subject[property]);
+          continue;
+        }
+
+        // merge objects
+        var objects = subject[property];
+        for(var oi = 0; oi < objects.length; ++oi) {
+          jsonld.addValue(
+            mergedSubject, property, _clone(objects[oi]),
+            {propertyIsArray: true});
+        }
+      }
+    }
+  }
+  graphMap['@merged'] = merged;
+  console.log('MERGED', JSON.stringify(merged, null, 2));
+}
+
 /**
  * Frames subjects according to the given frame.
  *
@@ -4855,6 +4917,7 @@ function _frame(state, subjects, frame, parent, property) {
   // validate the frame
   _validateFrame(frame);
   frame = frame[0];
+  console.log('the frame', JSON.stringify(frame, null, 2));
 
   // get flags for current frame
   var options = state.options;
@@ -4863,6 +4926,12 @@ function _frame(state, subjects, frame, parent, property) {
     explicit: _getFrameFlag(frame, options, 'explicit'),
     requireAll: _getFrameFlag(frame, options, 'requireAll')
   };
+
+  // get link for current graph
+  var link = state.link[state.graph];
+  if(!link) {
+    state.link[state.graph] = link = {};
+  }
 
   // filter out subjects that match the frame
   var matches = _filterSubjects(state, subjects, frame, flags);
@@ -4873,7 +4942,7 @@ function _frame(state, subjects, frame, parent, property) {
     var id = ids[idx];
     var subject = matches[id];
 
-    if(flags.embed === '@link' && id in state.link) {
+    if(flags.embed === '@link' && id in link) {
       // TODO: may want to also match an existing linked subject against
       // the current frame ... so different frames could produce different
       // subjects that are only shared in-memory when the frames are the same
@@ -4888,19 +4957,22 @@ function _frame(state, subjects, frame, parent, property) {
     which only occurs at the top-level. */
     if(property === null) {
       state.uniqueEmbeds = {};
+      state.uniqueEmbeds[state.graph] = {};
+    } else if(!(state.graph in state.uniqueEmbeds)) {
+      state.uniqueEmbeds[state.graph] = {};
     }
 
     // start output for subject
     var output = {};
     output['@id'] = id;
-    state.link[id] = output;
+    link[id] = output;
 
     // if embed is @never or if a circular reference would be created by an
     // embed, the subject cannot be embedded, just add the reference;
     // note that a circular reference won't occur when the embed flag is
     // `@link` as the above check will short-circuit before reaching this point
     if(flags.embed === '@never' ||
-      _createsCircularReference(subject, state.subjectStack)) {
+      _createsCircularReference(subject, state.graph, state.subjectStack)) {
       _addFrameOutput(parent, property, output);
       continue;
     }
@@ -4908,14 +4980,52 @@ function _frame(state, subjects, frame, parent, property) {
     // if only the last match should be embedded
     if(flags.embed === '@last') {
       // remove any existing embed
-      if(id in state.uniqueEmbeds) {
+      if(id in state.uniqueEmbeds[state.graph]) {
         _removeEmbed(state, id);
       }
-      state.uniqueEmbeds[id] = {parent: parent, property: property};
+      state.uniqueEmbeds[state.graph][id] = {
+        parent: parent,
+        property: property
+      };
     }
 
     // push matching subject onto stack to enable circular embed checks
-    state.subjectStack.push(subject);
+    state.subjectStack.push({
+      subject: subject,
+      graph: state.graph
+    });
+
+    // subject is a graph
+    if(id in state.graphMap) {
+      // check frame's "@graph" to see what to do next
+      // 1. if it doesn't exist and state.graph === "@merged", don't recurse
+      // 2. if it doesn't exist and state.graph !== "@merged", recurse
+      // 3. if "@merged" then don't recurse
+      // 4. if "@default" then don't recurse
+      // 5. recurse
+      var recurse = false;
+      var subframe;
+      if(!('@graph' in frame)) {
+        recurse = (state.graph !== '@merged');
+        subframe = {};
+      } else {
+        subframe = frame['@graph'][0];
+        recurse = !(subframe === '@merged' || subframe === '@default');
+        if(_isString(subframe)) {
+          subframe = {};
+        }
+      }
+      // TODO: add test case for frame: {"@id": "foo", "@graph": {"@type": "bar"}}
+      console.log('potential recursion frame', subframe);
+      if(recurse) {
+        console.log('\n***recurse', id, state.graphMap);
+        state.graphStack.push(state.graph);
+        state.graph = id;
+        _frame(
+          state, Object.keys(state.graphMap[id]), [subframe], output, '@graph');
+        state.graph = state.graphStack.pop();
+      }
+    }
 
     // iterate over subject properties
     var props = Object.keys(subject).sort();
@@ -4962,6 +5072,7 @@ function _frame(state, subjects, frame, parent, property) {
         }
 
         if(_isSubjectReference(o)) {
+          console.log('subject ref', o, prop);
           // recurse into subject reference
           var subframe = (prop in frame ?
             frame[prop] : _createImplicitFrame(flags));
@@ -5032,13 +5143,15 @@ function _createImplicitFrame(flags) {
  * would cause a circular reference.
  *
  * @param subjectToEmbed the subject to embed.
+ * @param graph the graph the subject to embed is in.
  * @param subjectStack the current stack of subjects.
  *
  * @return true if a circular reference would be created, false if not.
  */
-function _createsCircularReference(subjectToEmbed, subjectStack) {
+function _createsCircularReference(subjectToEmbed, graph, subjectStack) {
   for(var i = subjectStack.length - 1; i >= 0; --i) {
-    if(subjectStack[i]['@id'] === subjectToEmbed['@id']) {
+    if(subjectStack[i].graph === graph &&
+      subjectStack[i].subject['@id'] === subjectToEmbed['@id']) {
       return true;
     }
   }
@@ -5101,7 +5214,7 @@ function _filterSubjects(state, subjects, frame, flags) {
   var rval = {};
   for(var i = 0; i < subjects.length; ++i) {
     var id = subjects[i];
-    var subject = state.subjects[id];
+    var subject = state.graphMap[state.graph][id];
     if(_filterSubject(subject, frame, flags)) {
       rval[id] = subject;
     }
@@ -5185,7 +5298,7 @@ function _filterSubject(subject, frame, flags) {
  */
 function _removeEmbed(state, id) {
   // get existing embed
-  var embeds = state.uniqueEmbeds;
+  var embeds = state.uniqueEmbeds[state.graph];
   var embed = embeds[id];
   var parent = embed.parent;
   var property = embed.property;
