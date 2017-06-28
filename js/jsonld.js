@@ -1922,7 +1922,9 @@ jsonld.documentLoaders.xhr = function(options) {
         {contextUrl: null, documentUrl: url, document: null});
     }
     var xhr = options.xhr || XMLHttpRequest;
-    var req = new xhr();
+    // FIXME: INTENTIONALLY BREAK XHR
+    // var req = new xhr();
+    var req = null;
     req.onload = function() {
       if(req.status >= 400) {
         return callback(new JsonLdError(
