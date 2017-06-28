@@ -1509,6 +1509,7 @@ jsonld.RequestQueue = function() {
   this._requests = {};
 };
 jsonld.RequestQueue.prototype.wrapLoader = function(loader) {
+  console.log('LLLLLLLLLLLLL', loader);
   this._loader = loader;
   this._usePromise = (loader.length === 1);
   return this.add.bind(this);
@@ -1898,12 +1899,14 @@ jsonld.documentLoaders.xhr = function(options) {
     options.usePromise : (typeof Promise !== 'undefined'));
   if(usePromise) {
     return queue.wrapLoader(function(url) {
+      console.log('XXXXXXXXXXXXXXXXXXX');
       return jsonld.promisify(loader, url);
     });
   }
   return queue.wrapLoader(loader);
 
   function loader(url, callback) {
+    console.log('UUUUUUUUUUUUUU', url);
     if(url.indexOf('http:') !== 0 && url.indexOf('https:') !== 0) {
       return callback(new JsonLdError(
         'URL could not be dereferenced; only "http" and "https" URLs are ' +
@@ -8111,6 +8114,7 @@ if(_nodejs) {
   jsonld.useDocumentLoader('node');
 } else if(typeof XMLHttpRequest !== 'undefined') {
   // use xhr document loader by default
+  console.log('******************* USING XHR LOADER');
   jsonld.useDocumentLoader('xhr');
 }
 
