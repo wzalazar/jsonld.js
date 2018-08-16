@@ -6,6 +6,7 @@
 ### Added
 - Initial support for benchmarking.
 - Basic callback interface tests.
+- Add README note about running json-ld.org test suite.
 
 ### Removed
 - Callback version of every test.
