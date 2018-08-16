@@ -1,5 +1,8 @@
 # jsonld ChangeLog
 
+### Changed
+- Use JSON-LD WG tests.
+
 ### Added
 - Initial support for benchmarking.
 - Basic callback interface tests.
